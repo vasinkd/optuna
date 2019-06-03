@@ -8,6 +8,7 @@ from optuna.samplers import random  # NOQA
 from optuna.samplers.tpe.parzen_estimator import ParzenEstimator  # NOQA
 from optuna.samplers.tpe.parzen_estimator import ParzenEstimatorParameters  # NOQA
 from optuna.storages.base import BaseStorage  # NOQA
+from optuna import structs
 from optuna.structs import StudyDirection
 from optuna import types
 
@@ -70,9 +71,28 @@ class TPESampler(base.BaseSampler):
     def sample(self, storage, study_id, param_name, param_distribution):
         # type: (BaseStorage, int, str, BaseDistribution) -> float
 
-        observation_pairs = storage.get_trial_param_result_pairs(study_id, param_name)
+        # observation_pairs = storage.get_trial_param_result_pairs(study_id, param_name)
+
+        all_trials = storage.get_all_trials(study_id)
+
+        observation_pairs = []
+        for t in all_trials:
+            if t.value is None:
+                continue
+            if param_name not in t.params:
+                continue
+            if t.state is structs.TrialState.FAIL or t.state is structs.TrialState.RUNNING:
+                continue
+
+            if len(t.intermediate_values) == 0:
+                last_step = float('inf')
+            else:
+                last_step = max(t.intermediate_values.keys())
+            pair = (t.params_in_internal_repr[param_name], (-last_step, t.value))
+            observation_pairs.append(pair)
+
         if storage.get_study_direction(study_id) == StudyDirection.MAXIMIZE:
-            observation_pairs = [(p, -v) for p, v in observation_pairs]
+            observation_pairs = [(p, (step, -v)) for p, (step, v) in observation_pairs]
 
         n = len(observation_pairs)
 
@@ -117,8 +137,12 @@ class TPESampler(base.BaseSampler):
     ):
         # type: (...) -> Tuple[np.ndarray, np.ndarray]
 
-        config_idxs, config_vals, loss_idxs, loss_vals = map(
-            np.asarray, [config_idxs, config_vals, loss_idxs, loss_vals])
+        # config_idxs, config_vals, loss_idxs, loss_vals = map(
+        #     np.asarray, [config_idxs, config_vals, loss_idxs, loss_vals])
+        config_idxs, config_vals, loss_idxs = map(np.asarray,
+                                                  [config_idxs, config_vals, loss_idxs])
+        loss_vals = np.asarray(loss_vals, dtype=[('steps', float), ('score', float)])
+
         n_below = self.gamma(len(config_vals))
         loss_ascending = np.argsort(loss_vals)
 
