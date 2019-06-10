@@ -177,6 +177,7 @@ class Study(object):
     def register_trial(self, params, distributions, user_attrs=None, system_attrs=None):
         # type: (Dict[str, float], Dict[str, BaseDistribution], Optional[Dict[str,Any]], Optional[Dict[str, Any]]) -> None
 
+        # TODO(ohta): Add initial field values of a new trial to `create_new_trial_id` method.
         trial_id = self.storage.create_new_trial_id(self.study_id)
 
         for param_name, param_value in params.items():
