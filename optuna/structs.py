@@ -26,11 +26,12 @@ class TrialState(enum.Enum):
     COMPLETE = 1
     PRUNED = 2
     FAIL = 3
+    WAITING = 4
 
     def is_finished(self):
         # type: () -> bool
 
-        return self != self.RUNNING
+        return self != self.RUNNING and self != self.WAITING
 
 
 class StudyDirection(enum.Enum):

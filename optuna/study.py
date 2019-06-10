@@ -28,6 +28,8 @@ if types.TYPE_CHECKING:
     from typing import Type  # NOQA
     from typing import Union  # NOQA
 
+    from optuna.distributions import BaseDistribution  # NOQA
+
     ObjectiveFuncType = Callable[[trial_module.Trial], float]
 
 
@@ -171,6 +173,26 @@ class Study(object):
         """
 
         return self.storage.get_study_system_attrs(self.study_id)
+
+    def register_trial(self, params, distributions, user_attrs=None, system_attrs=None):
+        # type: (Dict[str, float], Dict[str, BaseDistribution], Optional[Dict[str,Any]], Optional[Dict[str, Any]]) -> None
+
+        trial_id = self.storage.create_new_trial_id(self.study_id)
+
+        for param_name, param_value in params.items():
+            distribution = distributions[param_name]
+            param_value_internal = distribution.to_internal_repr(param_value)
+            self.storage.set_trial_param(trial_id, param_name, param_value_internal, distribution)
+
+        user_attrs = user_attrs or {}
+        for k, v in user_attrs.items():
+            self.storage.set_trial_user_attr(trial_id, k, v)
+
+        system_attrs = system_attrs or {}
+        for k, v in system_attrs.items():
+            self.storage.set_trial_system_attr(trial_id, k, v)
+
+        self.storage.set_trial_state(trial_id, structs.TrialState.WAITING)
 
     def optimize(
             self,
@@ -388,10 +410,27 @@ class Study(object):
         que.close()
         que.join_thread()
 
+    def _pop_waiting_trial_id(self):
+        # type: () -> Optional[int]
+
+        for trial in self.trials:
+            if trial.state != structs.TrialState.WAITING:
+                continue
+
+            # TODO(ohta): Use CAS
+            self.storage.set_trial_state(trial.trial_id, structs.TrialState.RUNNING)
+
+            self.logger.debug("Trial#{} was popped from the trial queue.".format(trial.number))
+            return trial.trial_id
+
+        return None
+
     def _run_trial(self, func, catch):
         # type: (ObjectiveFuncType, Union[Tuple[()], Tuple[Type[Exception]]]) -> trial_module.Trial
 
-        trial_id = self.storage.create_new_trial_id(self.study_id)
+        trial_id = self._pop_waiting_trial_id()
+        if trial_id is None:
+            trial_id = self.storage.create_new_trial_id(self.study_id)
         trial = trial_module.Trial(self, trial_id)
         trial_number = trial.number
 
