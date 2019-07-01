@@ -56,6 +56,9 @@ class RDBStorage(BaseStorage):
         # type: (str, Optional[Dict[str, Any]], bool, bool) -> None
 
         engine_kwargs = engine_kwargs or {}
+        engine_kwargs.update(
+            {"pool_size": engine_kwargs.get("pool_size", 20),
+             "max_overflow": engine_kwargs.get("max_overflow", 20)})
 
         url = self._fill_storage_url_template(url)
 
